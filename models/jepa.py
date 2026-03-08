@@ -55,6 +55,9 @@ class TeacherStudentJEPA(nn.Module):
         _freeze_module(self.teacher_readout)
 
         self.student_span_projector = nn.Linear(d_in, d_out)
+        # Target span projection is fixed in the current objective: the predictor learns
+        # to match a frozen projected teacher span, so this module should not be trainable.
+        _freeze_module(self.student_span_projector)
         self.teacher_span_projector = copy.deepcopy(self.student_span_projector)
         _freeze_module(self.teacher_span_projector)
 
@@ -82,10 +85,9 @@ class TeacherStudentJEPA(nn.Module):
         )
 
     def update_teacher(self, decay: float | None = None) -> None:
-        """Applies EMA update to teacher readout and span projector."""
+        """Applies EMA update to the teacher readout."""
         ema_decay = self.ema_decay if decay is None else decay
         _update_ema(self.student_readout, self.teacher_readout, ema_decay)
-        _update_ema(self.student_span_projector, self.teacher_span_projector, ema_decay)
 
     def forward(
         self,
