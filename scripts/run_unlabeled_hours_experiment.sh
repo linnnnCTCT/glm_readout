@@ -29,8 +29,12 @@ TRAIN_MASTER_PORT_QFORMER="${TRAIN_MASTER_PORT_QFORMER:-29610}"
 TRAIN_MASTER_PORT_MEAN="${TRAIN_MASTER_PORT_MEAN:-29620}"
 
 TRAIN_EPOCHS="${TRAIN_EPOCHS:-12}"
-TRAIN_BATCH_SIZE="${TRAIN_BATCH_SIZE:-6}"
-TRAIN_NUM_WORKERS="${TRAIN_NUM_WORKERS:-4}"
+TRAIN_BATCH_SIZE_QFORMER="${TRAIN_BATCH_SIZE_QFORMER:-12}"
+TRAIN_BATCH_SIZE_MEAN="${TRAIN_BATCH_SIZE_MEAN:-24}"
+TRAIN_NUM_WORKERS_QFORMER="${TRAIN_NUM_WORKERS_QFORMER:-8}"
+TRAIN_NUM_WORKERS_MEAN="${TRAIN_NUM_WORKERS_MEAN:-8}"
+TRAIN_PREFETCH_FACTOR_QFORMER="${TRAIN_PREFETCH_FACTOR_QFORMER:-4}"
+TRAIN_PREFETCH_FACTOR_MEAN="${TRAIN_PREFETCH_FACTOR_MEAN:-4}"
 EXPORT_BATCH_SIZE="${EXPORT_BATCH_SIZE:-8}"
 EXPORT_NUM_WORKERS="${EXPORT_NUM_WORKERS:-2}"
 MASK_RATIO="${MASK_RATIO:-0.30}"
@@ -200,8 +204,9 @@ if [[ ! -f "${QFORMER_CKPT}" ]]; then
       "data.hidden_dtype=bfloat16" \
       "data.max_length=131072" \
       "data.random_crop=false" \
-      "data.num_workers=${TRAIN_NUM_WORKERS}" \
-      "training.batch_size=${TRAIN_BATCH_SIZE}" \
+      "data.num_workers=${TRAIN_NUM_WORKERS_QFORMER}" \
+      "data.prefetch_factor=${TRAIN_PREFETCH_FACTOR_QFORMER}" \
+      "training.batch_size=${TRAIN_BATCH_SIZE_QFORMER}" \
       "training.epochs=${TRAIN_EPOCHS}" \
       "corruption.mask_ratio=${MASK_RATIO}" \
       "corruption.mask_target_span=true" \
@@ -230,8 +235,9 @@ if [[ ! -f "${MEAN_CKPT}" ]]; then
       "data.hidden_dtype=bfloat16" \
       "data.max_length=131072" \
       "data.random_crop=false" \
-      "data.num_workers=${TRAIN_NUM_WORKERS}" \
-      "training.batch_size=${TRAIN_BATCH_SIZE}" \
+      "data.num_workers=${TRAIN_NUM_WORKERS_MEAN}" \
+      "data.prefetch_factor=${TRAIN_PREFETCH_FACTOR_MEAN}" \
+      "training.batch_size=${TRAIN_BATCH_SIZE_MEAN}" \
       "training.epochs=${TRAIN_EPOCHS}" \
       "corruption.mask_ratio=${MASK_RATIO}" \
       "corruption.mask_target_span=true" \
@@ -353,8 +359,10 @@ Main training data:
   shared val genomes across 8k/32k/128k: ${VAL_GENOMES_SHARED}
   qformer GPUs: ${TRAIN_GPU_IDS_QFORMER}
   mean GPUs: ${TRAIN_GPU_IDS_MEAN}
-  train batch_size per GPU: ${TRAIN_BATCH_SIZE}
-  train data workers per rank: ${TRAIN_NUM_WORKERS}
+  qformer batch_size per GPU: ${TRAIN_BATCH_SIZE_QFORMER}
+  mean batch_size per GPU: ${TRAIN_BATCH_SIZE_MEAN}
+  qformer data workers per rank: ${TRAIN_NUM_WORKERS_QFORMER}
+  mean data workers per rank: ${TRAIN_NUM_WORKERS_MEAN}
 
 Training outputs:
   qformer_small: ${QFORMER_RUN_DIR}

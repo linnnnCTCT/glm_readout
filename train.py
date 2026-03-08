@@ -128,7 +128,15 @@ def main() -> None:
     )
     model.to(device)
     if distributed:
-        model = DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
+        model = DistributedDataParallel(
+            model,
+            device_ids=[local_rank],
+            output_device=local_rank,
+            broadcast_buffers=bool(cfg["training"].get("ddp_broadcast_buffers", False)),
+            find_unused_parameters=bool(
+                cfg["training"].get("ddp_find_unused_parameters", True)
+            ),
+        )
 
     optimizer = torch.optim.AdamW(
         [param for param in model.parameters() if param.requires_grad],
