@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--contig-spacer-length",
         type=int,
-        default=256,
+        default=1,
         help="Number of Ns inserted between contigs when concatenating.",
     )
     parser.add_argument(
@@ -538,7 +538,7 @@ def extract_concat_window_records(
     position = 0
     saw_sequence = False
     pending_spacer = False
-    spacer = "N" * max(contig_spacer_length, 0)
+    spacer = "#" * max(contig_spacer_length, 0)
 
     with Path(path).open("r", encoding="utf-8") as handle:
         for raw_line in handle:

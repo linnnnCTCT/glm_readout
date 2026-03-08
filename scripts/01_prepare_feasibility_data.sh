@@ -28,7 +28,7 @@ ARGS=(
   --output-dir "$OUTPUT_ROOT"
   --seed "$SEED"
   --concat-contigs
-  --contig-spacer-length 256
+  --contig-spacer-length 1
   --workers "$WORKERS"
   --summary-chunksize "$SUMMARY_CHUNKSIZE"
   --extract-chunksize "$EXTRACT_CHUNKSIZE"
