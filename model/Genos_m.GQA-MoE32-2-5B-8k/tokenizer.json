@@ -1,0 +1,158 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {
+      "id": 0,
+      "content": "<unk>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 1,
+      "content": "<s>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 2,
+      "content": "</s>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 3,
+      "content": "<pad>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 4,
+      "content": "<MASK>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 13,
+      "content": "<CLS>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 14,
+      "content": "<SEP>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+    {
+      "id": 16,
+      "content": "<EOD>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": null,
+  "post_processor": null,
+  "decoder": null,
+  "model": {
+    "type": "Unigram",
+    "unk_id": 0,
+    "vocab": [
+      [
+        "<unk>",
+        0.0
+      ],
+      [
+        "<s>",
+        0.0
+      ],
+      [
+        "</s>",
+        0.0
+      ],
+      [
+        "<pad>",
+        0.0
+      ],
+      [
+        "<MASK>",
+        0.0
+      ],
+      [
+        "C",
+        0.0
+      ],
+      [
+        "G",
+        0.0
+      ],
+      [
+        "T",
+        0.0
+      ],
+      [
+        "A",
+        0.0
+      ],
+      [
+        "N",
+        0.0
+      ],
+      [
+        "@",
+        0.0
+      ],
+      [
+        "#",
+        0.0
+      ],
+      [
+        "U",
+        0.0
+      ],
+      [
+        "<CLS>",
+        0.0
+      ],
+      [
+        "<SEP>",
+        0.0
+      ],
+      [
+        "▁",
+        0.0
+      ],
+      [
+        "<EOD>",
+        0.0
+      ]
+    ],
+    "byte_fallback": false
+  }
+}
