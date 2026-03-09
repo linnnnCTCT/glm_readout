@@ -26,6 +26,7 @@ EXPORT_NUM_WORKERS="${EXPORT_NUM_WORKERS:-2}"
 SEQ_POOL="${SEQ_POOL:-attn}"
 
 EXPERIMENTS=(
+  "qformer_cov_0|8|2|0"
   "qformer_baseline|8|2|1e-5"
   "qformer_cov_5e-5|8|2|5e-5"
   "qformer_cov_1e-4|8|2|1e-4"
@@ -269,7 +270,8 @@ Training GPU groups: ${TRAIN_GPU_GROUPS}
 Export GPUs: ${EXPORT_GPUS_STRING}
 
 Experiments:
-  qformer_baseline: num_queries=8, num_layers=2, covariance_weight=1e-5
+  qformer_cov_0: num_queries=8, num_layers=2, covariance_weight=0
+  qformer_baseline: num_queries=8, num_layers=2, covariance_weight=1e-5 (legacy baseline name)
   qformer_cov_5e-5: num_queries=8, num_layers=2, covariance_weight=5e-5
   qformer_cov_1e-4: num_queries=8, num_layers=2, covariance_weight=1e-4
   qformer_q16_cov_5e-5: num_queries=16, num_layers=2, covariance_weight=5e-5
