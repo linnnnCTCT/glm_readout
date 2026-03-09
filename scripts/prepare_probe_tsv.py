@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -46,6 +47,16 @@ def infer_delimiter(path: Path) -> str:
     return "\t"
 
 
+def configure_csv_field_limit() -> None:
+    limit = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(limit)
+            return
+        except OverflowError:
+            limit //= 10
+
+
 def infer_task(label_values: list[str]) -> str:
     parsed_floats: list[float] = []
     for value in label_values:
@@ -76,6 +87,7 @@ def make_sample_id(row: dict[str, str], id_column: str, row_index: int) -> str:
 
 def main() -> None:
     args = parse_args()
+    configure_csv_field_limit()
     input_path = Path(args.input)
     output_dir = Path(args.output_dir)
     manifest_dir = output_dir / "manifests"
