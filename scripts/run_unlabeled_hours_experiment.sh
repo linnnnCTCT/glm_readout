@@ -67,6 +67,8 @@ QFORMER_RUN_DIR="${RUN_ROOT}/128k_qformer_small"
 MEAN_RUN_DIR="${RUN_ROOT}/128k_mean_baseline"
 QFORMER_CKPT="${QFORMER_RUN_DIR}/checkpoint_epoch_${TRAIN_EPOCHS}.pt"
 MEAN_CKPT="${MEAN_RUN_DIR}/checkpoint_epoch_${TRAIN_EPOCHS}.pt"
+QFORMER_CONFIG="${QFORMER_RUN_DIR}/resolved_config.json"
+MEAN_CONFIG="${MEAN_RUN_DIR}/resolved_config.json"
 QFORMER_EVAL_DIR="${EVAL_ROOT}/qformer_small"
 MEAN_EVAL_DIR="${EVAL_ROOT}/mean_baseline"
 
@@ -264,14 +266,15 @@ bucket_max_length() {
 }
 
 export_view() {
-  local checkpoint_path="$1"
-  local bucket="$2"
-  local gpu="$3"
-  local output_path="$4"
+  local config_path="$1"
+  local checkpoint_path="$2"
+  local bucket="$3"
+  local gpu="$4"
+  local output_path="$5"
   local max_length
   max_length="$(bucket_max_length "${bucket}")"
   CUDA_VISIBLE_DEVICES="${gpu}" python "${PROJECT_ROOT}/eval/export_embeddings.py" \
-    --config "${PROJECT_ROOT}/configs/v1.yaml" \
+    --config "${config_path}" \
     --override \
       "data.data_root=${HS_ROOT}/${bucket}/val" \
       "data.hidden_dtype=bfloat16" \
@@ -289,15 +292,15 @@ mkdir -p "${QFORMER_EVAL_DIR}" "${MEAN_EVAL_DIR}"
 
 EXPORT_PIDS=()
 if [[ ! -f "${QFORMER_EVAL_DIR}/8k_embeddings.pt" ]]; then
-  export_view "${QFORMER_CKPT}" 8k "${EXPORT_GPUS[0]}" "${QFORMER_EVAL_DIR}/8k_embeddings.pt" &
+  export_view "${QFORMER_CONFIG}" "${QFORMER_CKPT}" 8k "${EXPORT_GPUS[0]}" "${QFORMER_EVAL_DIR}/8k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ ! -f "${QFORMER_EVAL_DIR}/32k_embeddings.pt" ]]; then
-  export_view "${QFORMER_CKPT}" 32k "${EXPORT_GPUS[1]}" "${QFORMER_EVAL_DIR}/32k_embeddings.pt" &
+  export_view "${QFORMER_CONFIG}" "${QFORMER_CKPT}" 32k "${EXPORT_GPUS[1]}" "${QFORMER_EVAL_DIR}/32k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ ! -f "${QFORMER_EVAL_DIR}/128k_embeddings.pt" ]]; then
-  export_view "${QFORMER_CKPT}" 128k "${EXPORT_GPUS[2]}" "${QFORMER_EVAL_DIR}/128k_embeddings.pt" &
+  export_view "${QFORMER_CONFIG}" "${QFORMER_CKPT}" 128k "${EXPORT_GPUS[2]}" "${QFORMER_EVAL_DIR}/128k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ "${#EXPORT_PIDS[@]}" -gt 0 ]]; then
@@ -306,15 +309,15 @@ fi
 
 EXPORT_PIDS=()
 if [[ ! -f "${MEAN_EVAL_DIR}/8k_embeddings.pt" ]]; then
-  export_view "${MEAN_CKPT}" 8k "${EXPORT_GPUS[0]}" "${MEAN_EVAL_DIR}/8k_embeddings.pt" &
+  export_view "${MEAN_CONFIG}" "${MEAN_CKPT}" 8k "${EXPORT_GPUS[0]}" "${MEAN_EVAL_DIR}/8k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ ! -f "${MEAN_EVAL_DIR}/32k_embeddings.pt" ]]; then
-  export_view "${MEAN_CKPT}" 32k "${EXPORT_GPUS[1]}" "${MEAN_EVAL_DIR}/32k_embeddings.pt" &
+  export_view "${MEAN_CONFIG}" "${MEAN_CKPT}" 32k "${EXPORT_GPUS[1]}" "${MEAN_EVAL_DIR}/32k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ ! -f "${MEAN_EVAL_DIR}/128k_embeddings.pt" ]]; then
-  export_view "${MEAN_CKPT}" 128k "${EXPORT_GPUS[2]}" "${MEAN_EVAL_DIR}/128k_embeddings.pt" &
+  export_view "${MEAN_CONFIG}" "${MEAN_CKPT}" 128k "${EXPORT_GPUS[2]}" "${MEAN_EVAL_DIR}/128k_embeddings.pt" &
   EXPORT_PIDS+=("$!")
 fi
 if [[ "${#EXPORT_PIDS[@]}" -gt 0 ]]; then
