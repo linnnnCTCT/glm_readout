@@ -104,6 +104,8 @@ def load_student_state(payload: dict[str, Any]) -> dict[str, torch.Tensor]:
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config, overrides=args.override)
+    if args.num_workers > 0:
+        torch.multiprocessing.set_sharing_strategy("file_system")
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
