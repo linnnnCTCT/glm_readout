@@ -56,5 +56,5 @@ training:
   grad_clip_norm: 1.0
   amp: true
   log_interval: 10
-  ddp_find_unused_parameters: true
+  ddp_find_unused_parameters: false
   ddp_broadcast_buffers: false
