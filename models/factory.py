@@ -7,6 +7,7 @@ from typing import Any
 from .chunk_pooling import ChunkPooler
 from .readouts import (
     AttentionPoolingReadout,
+    GatedAttentionPoolingReadout,
     LastTokenReadout,
     MeanPoolingReadout,
     ReadoutQFormer,
@@ -47,5 +48,12 @@ def build_readout(cfg: dict[str, Any]):
         return LastTokenReadout(d_in=d_in, d_out=d_out, chunk_pooler=chunk_pooler)
     if model_type == "attention":
         return AttentionPoolingReadout(d_in=d_in, d_out=d_out, chunk_pooler=chunk_pooler)
+    if model_type == "gated_attention":
+        return GatedAttentionPoolingReadout(
+            d_in=d_in,
+            d_out=d_out,
+            chunk_pooler=chunk_pooler,
+            gate_hidden_dim=cfg.get("gate_hidden_dim"),
+        )
 
     raise ValueError(f"Unknown readout type '{model_type}'")

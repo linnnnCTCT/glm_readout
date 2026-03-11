@@ -5,6 +5,7 @@ from .factory import build_chunk_pooler, build_readout
 from .jepa import TeacherStudentJEPA
 from .readouts import (
     AttentionPoolingReadout,
+    GatedAttentionPoolingReadout,
     LastTokenReadout,
     MeanPoolingReadout,
     ReadoutQFormer,
@@ -13,6 +14,7 @@ from .readouts import (
 __all__ = [
     "AttentionPoolingReadout",
     "ChunkPooler",
+    "GatedAttentionPoolingReadout",
     "LastTokenReadout",
     "MeanPoolingReadout",
     "ReadoutQFormer",

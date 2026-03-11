@@ -1,0 +1,55 @@
+experiment:
+  name: gated_attention_jepa
+  seed: 42
+  output_dir: outputs/gated_attention_jepa
+
+data:
+  data_root: data/hidden_states
+  hidden_key: hidden_states
+  attention_mask_key: attention_mask
+  label_key: label
+  max_length: 131072
+  random_crop: true
+  num_workers: 0
+
+model:
+  type: gated_attention
+  d_in: 1024
+  d_out: 512
+  gate_hidden_dim: 512
+  chunk_pooling:
+    enabled: true
+    chunk_size: 64
+    stride: 64
+    mode: mean
+
+jepa:
+  predictor_hidden_dim: 1024
+  use_span_position: true
+  ema_decay: 0.995
+  span:
+    min_tokens: 256
+    max_tokens: 2048
+    span_ratio: 0.1
+
+corruption:
+  mask_ratio: 0.30
+  noise_std: 0.01
+  zero_replace_prob: 1.0
+  mask_target_span: true
+
+loss:
+  variance_weight: 0.01
+  covariance_weight: 5.0e-5
+  variance_floor: 1.0
+
+training:
+  batch_size: 12
+  epochs: 12
+  lr: 1.0e-4
+  weight_decay: 0.01
+  grad_clip_norm: 1.0
+  amp: true
+  log_interval: 10
+  ddp_find_unused_parameters: false
+  ddp_broadcast_buffers: false

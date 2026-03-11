@@ -165,6 +165,41 @@ class AttentionPoolingReadout(BaseReadout):
         }
 
 
+class GatedAttentionPoolingReadout(BaseReadout):
+    """Gated attention pooling with a learnable content gate."""
+
+    def __init__(
+        self,
+        d_in: int,
+        d_out: int,
+        chunk_pooler: ChunkPooler | None = None,
+        gate_hidden_dim: int | None = None,
+    ) -> None:
+        super().__init__(d_in=d_in, d_out=d_out, chunk_pooler=chunk_pooler)
+        hidden_dim = gate_hidden_dim or d_out
+        self.attn_proj = nn.Linear(d_out, hidden_dim)
+        self.gate_proj = nn.Linear(d_out, hidden_dim)
+        self.score_proj = nn.Linear(hidden_dim, 1)
+
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ) -> dict[str, torch.Tensor]:
+        token_embeddings, token_mask = self.preprocess_tokens(hidden_states, attention_mask)
+        attn_features = torch.tanh(self.attn_proj(token_embeddings))
+        gate_features = torch.sigmoid(self.gate_proj(token_embeddings))
+        scores = self.score_proj(attn_features * gate_features).squeeze(-1)
+        weights = masked_softmax(scores, token_mask)
+        z_seq = (weights.unsqueeze(-1) * token_embeddings).sum(dim=1)
+        z_latent = z_seq.unsqueeze(1)
+        return {
+            "Z_latent": z_latent,
+            "z_seq": z_seq,
+            "token_embeddings": token_embeddings,
+            "token_mask": token_mask,
+            "pool_weights": weights,
+        }
+
+
 class QFormerBlock(nn.Module):
     """Cross-attention + self-attention + FFN block for latent queries."""
 
