@@ -30,12 +30,18 @@ class SpeciesTsvDataset(Dataset):
         input_path: str | Path,
         label_to_id: dict[str, int] | None = None,
         id_prefix: str | None = None,
+        shard_index: int | None = None,
+        num_shards: int | None = None,
     ) -> None:
         self.input_path = Path(input_path)
-        self.rows = self._load_rows()
+        self.all_rows = self._load_rows()
         self.id_prefix = id_prefix or self.input_path.stem
-        self.label_to_id = label_to_id or self._build_label_to_id(self.rows)
+        self.label_to_id = label_to_id or self._build_label_to_id(self.all_rows)
         self.id_to_label = [label for label, _ in sorted(self.label_to_id.items(), key=lambda item: item[1])]
+        self.total_rows = len(self.all_rows)
+        self.shard_index = shard_index
+        self.num_shards = num_shards
+        self.rows = self._select_shard_rows(self.all_rows, shard_index=shard_index, num_shards=num_shards)
 
     @staticmethod
     def _is_header(fields: list[str]) -> bool:
@@ -88,6 +94,33 @@ class SpeciesTsvDataset(Dataset):
         labels = sorted({genome_id for _, genome_id, _ in rows})
         return {label: index for index, label in enumerate(labels)}
 
+    @staticmethod
+    def _select_shard_rows(
+        rows: list[tuple[str, str, int]],
+        *,
+        shard_index: int | None,
+        num_shards: int | None,
+    ) -> list[tuple[str, str, int]]:
+        if shard_index is None and num_shards is None:
+            return rows
+        if shard_index is None or num_shards is None:
+            raise ValueError("Both shard_index and num_shards must be set together.")
+        if num_shards <= 0:
+            raise ValueError(f"num_shards must be positive, got {num_shards}")
+        if shard_index < 0 or shard_index >= num_shards:
+            raise ValueError(f"shard_index must be in [0, {num_shards}), got {shard_index}")
+
+        total = len(rows)
+        start = (total * shard_index) // num_shards
+        end = (total * (shard_index + 1)) // num_shards
+        shard_rows = rows[start:end]
+        if not shard_rows:
+            raise ValueError(
+                f"Shard {shard_index}/{num_shards} is empty for dataset with {total} rows. "
+                "Reduce num_shards."
+            )
+        return shard_rows
+
     def __len__(self) -> int:
         return len(self.rows)
 
@@ -121,6 +154,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-dtype", type=str, default="bfloat16")
     parser.add_argument("--save-dtype", type=str, default="float16")
     parser.add_argument("--id-prefix", type=str, default=None)
+    parser.add_argument("--shard-index", type=int, default=None)
+    parser.add_argument("--num-shards", type=int, default=None)
     parser.add_argument("--strict", action="store_true")
     return parser.parse_args()
 
@@ -187,6 +222,8 @@ def main() -> None:
         input_path=args.input_tsv,
         label_to_id=label_to_id,
         id_prefix=args.id_prefix,
+        shard_index=args.shard_index,
+        num_shards=args.num_shards,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
@@ -279,6 +316,9 @@ def main() -> None:
         "id_to_label": dataset.id_to_label,
         "input_tsv": str(Path(args.input_tsv).resolve()),
         "num_samples": len(dataset),
+        "num_total_rows": dataset.total_rows,
+        "shard_index": args.shard_index,
+        "num_shards": args.num_shards,
     }
 
     torch.save(export_payload, output_path)
