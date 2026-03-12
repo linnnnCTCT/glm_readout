@@ -4,10 +4,12 @@ from .collate import hidden_state_collate_fn
 from .hidden_state_dataset import HiddenStateDataset
 from .masking import build_student_view
 from .span_sampler import ContiguousSpanSampler
+from .weighted_sampler import WeightedBucketBatchSampler
 
 __all__ = [
     "ContiguousSpanSampler",
     "HiddenStateDataset",
+    "WeightedBucketBatchSampler",
     "build_student_view",
     "hidden_state_collate_fn",
 ]

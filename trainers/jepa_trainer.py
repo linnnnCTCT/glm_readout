@@ -40,6 +40,7 @@ class JEPATrainer:
         train_sampler: Any | None = None,
         is_main_process: bool = True,
         world_size: int = 1,
+        wandb_logger: Any | None = None,
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -59,6 +60,7 @@ class JEPATrainer:
         self.train_sampler = train_sampler
         self.is_main_process = is_main_process
         self.world_size = max(world_size, 1)
+        self.wandb_logger = wandb_logger
         self.logger = logging.getLogger(__name__)
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
         self.global_step = 0
@@ -98,6 +100,18 @@ class JEPATrainer:
                     metrics["loss_var"],
                     metrics["loss_cov"],
                 )
+                if self.wandb_logger is not None:
+                    self.wandb_logger.log(
+                        {
+                            "epoch": epoch,
+                            "epoch/loss": metrics["loss"],
+                            "epoch/loss_jepa": metrics["loss_jepa"],
+                            "epoch/loss_var": metrics["loss_var"],
+                            "epoch/loss_cov": metrics["loss_cov"],
+                            "epoch/lr": float(self.optimizer.param_groups[0]["lr"]),
+                        },
+                        step=self.global_step,
+                    )
             if dist.is_available() and dist.is_initialized():
                 dist.barrier()
 
@@ -161,10 +175,27 @@ class JEPATrainer:
             steps = step
             if step % self.log_interval == 0:
                 denom = float(step)
+                avg_loss = running["loss"] / denom
+                avg_jepa = running["loss_jepa"] / denom
+                avg_var = running["loss_var"] / denom
+                avg_cov = running["loss_cov"] / denom
                 progress.set_postfix(
-                    loss=running["loss"] / denom,
-                    jepa=running["loss_jepa"] / denom,
+                    loss=avg_loss,
+                    jepa=avg_jepa,
                 )
+                if self.is_main_process and self.wandb_logger is not None:
+                    self.wandb_logger.log(
+                        {
+                            "train/epoch": epoch,
+                            "train/step_in_epoch": step,
+                            "train/loss": avg_loss,
+                            "train/loss_jepa": avg_jepa,
+                            "train/loss_var": avg_var,
+                            "train/loss_cov": avg_cov,
+                            "train/lr": float(self.optimizer.param_groups[0]["lr"]),
+                        },
+                        step=self.global_step,
+                    )
 
         metrics_tensor = torch.tensor(
             [

@@ -74,12 +74,18 @@ def parse_args() -> argparse.Namespace:
         help="Genome-level split ratios.",
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--concat-contigs", action="store_true", help="Concatenate contigs with N gaps.")
+    parser.add_argument("--concat-contigs", action="store_true", help="Concatenate contigs with spacer gaps.")
     parser.add_argument(
         "--contig-spacer-length",
         type=int,
         default=1,
-        help="Number of Ns inserted between contigs when concatenating.",
+        help="Number of spacer characters inserted between contigs when concatenating.",
+    )
+    parser.add_argument(
+        "--contig-spacer-char",
+        type=str,
+        default="#",
+        help="Single character inserted between contigs when concatenating.",
     )
     parser.add_argument(
         "--labels-tsv",
@@ -424,10 +430,13 @@ def load_cached_metadata(metadata_path: Path) -> dict[str, dict[str, Any]]:
     return {str(key): dict(value) for key, value in payload.items()}
 
 
-def build_prepare_settings(concat_contigs: bool, contig_spacer_length: int) -> dict[str, Any]:
+def build_prepare_settings(
+    concat_contigs: bool, contig_spacer_length: int, contig_spacer_char: str
+) -> dict[str, Any]:
     return {
         "concat_contigs": bool(concat_contigs),
         "contig_spacer_length": int(contig_spacer_length),
+        "contig_spacer_char": str(contig_spacer_char),
     }
 
 
@@ -532,13 +541,14 @@ def extract_concat_window_records(
     path: str,
     requests: list[dict[str, Any]],
     contig_spacer_length: int,
+    contig_spacer_char: str,
 ) -> list[dict[str, Any]]:
     buffers = [[] for _ in requests]
     active_index = 0
     position = 0
     saw_sequence = False
     pending_spacer = False
-    spacer = "#" * max(contig_spacer_length, 0)
+    spacer = str(contig_spacer_char) * max(contig_spacer_length, 0)
 
     with Path(path).open("r", encoding="utf-8") as handle:
         for raw_line in handle:
@@ -636,6 +646,7 @@ def extract_windows_job(job: dict[str, Any]) -> dict[str, Any]:
             path=str(job["fasta_path"]),
             requests=requests,
             contig_spacer_length=int(job["contig_spacer_length"]),
+            contig_spacer_char=str(job.get("contig_spacer_char", "#")),
         )
     else:
         records = extract_longest_contig_records(path=str(job["fasta_path"]), requests=requests)
@@ -672,6 +683,7 @@ def build_extraction_jobs(
     seed: int,
     concat_contigs: bool,
     contig_spacer_length: int,
+    contig_spacer_char: str,
 ) -> list[dict[str, Any]]:
     selected_index: dict[str, list[tuple[str, str]]] = {}
     for bucket_name, split_map_for_bucket in selected_by_bucket.items():
@@ -722,6 +734,7 @@ def build_extraction_jobs(
                 "fasta_path": meta["fasta_path"],
                 "concat_contigs": concat_contigs,
                 "contig_spacer_length": contig_spacer_length,
+                "contig_spacer_char": contig_spacer_char,
                 "requests": requests,
             }
         )
@@ -755,6 +768,7 @@ def main() -> None:
     prepare_settings = build_prepare_settings(
         concat_contigs=bool(args.concat_contigs),
         contig_spacer_length=int(args.contig_spacer_length),
+        contig_spacer_char=str(args.contig_spacer_char),
     )
     cached_metadata: dict[str, dict[str, Any]] = {}
     if args.reuse_metadata and metadata_path.exists() and settings_path.exists():
@@ -833,6 +847,7 @@ def main() -> None:
             seed=args.seed,
             concat_contigs=bool(args.concat_contigs),
             contig_spacer_length=int(args.contig_spacer_length),
+            contig_spacer_char=str(args.contig_spacer_char),
         )
 
         print(

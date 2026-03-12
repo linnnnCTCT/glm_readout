@@ -12,7 +12,12 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
-from data import ContiguousSpanSampler, HiddenStateDataset, hidden_state_collate_fn
+from data import (
+    ContiguousSpanSampler,
+    HiddenStateDataset,
+    WeightedBucketBatchSampler,
+    hidden_state_collate_fn,
+)
 from losses import JEPALoss
 from models import TeacherStudentJEPA, build_readout
 from trainers import JEPATrainer
@@ -20,10 +25,12 @@ from utils import (
     cleanup_distributed,
     init_distributed,
     is_main_process,
+    load_checkpoint,
     load_config,
     resolve_torch_dtype,
     setup_logging,
     set_seed,
+    WandbLogger,
 )
 
 
@@ -41,6 +48,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Override output directory from config.",
+    )
+    parser.add_argument(
+        "--init-checkpoint",
+        type=str,
+        default=None,
+        help="Optional model checkpoint to initialize weights from before training.",
     )
     return parser.parse_args()
 
@@ -77,35 +90,87 @@ def main() -> None:
         world_size,
     )
 
+    wandb_cfg = cfg.get("wandb", {})
+    wandb_logger = None
+    if main_process and bool(wandb_cfg.get("enabled", False)):
+        default_run_name = output_dir.name or experiment_cfg.get("name", "genosm_readout_jepa")
+        wandb_logger = WandbLogger(
+            enabled=True,
+            project=wandb_cfg.get("project"),
+            entity=wandb_cfg.get("entity"),
+            name=wandb_cfg.get("name", default_run_name),
+            tags=list(wandb_cfg.get("tags", [])),
+            mode=wandb_cfg.get("mode"),
+            run_dir=wandb_cfg.get("dir", output_dir),
+            config=cfg,
+        )
+
     data_cfg = cfg["data"]
+    data_root = data_cfg.get("data_roots", data_cfg["data_root"])
+    data_root_names = data_cfg.get("data_root_names")
     dataset = HiddenStateDataset(
-        data_root=data_cfg["data_root"],
+        data_root=data_root,
         hidden_key=data_cfg.get("hidden_key", "hidden_states"),
         attention_mask_key=data_cfg.get("attention_mask_key", "attention_mask"),
         label_key=data_cfg.get("label_key", "label"),
         hidden_dtype=resolve_torch_dtype(data_cfg.get("hidden_dtype", "float32")),
         max_length=data_cfg.get("max_length"),
         random_crop=bool(data_cfg.get("random_crop", False)),
+        data_root_names=data_root_names,
     )
-    sampler = DistributedSampler(dataset, shuffle=True) if distributed else None
+    sampler = None
+    batch_sampler = None
     num_workers = int(data_cfg.get("num_workers", 0))
-    dataloader = DataLoader(
-        dataset,
-        batch_size=int(cfg["training"].get("batch_size", 2)),
-        shuffle=sampler is None,
-        sampler=sampler,
-        num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        persistent_workers=num_workers > 0,
-        prefetch_factor=int(data_cfg.get("prefetch_factor", 2)) if num_workers > 0 else None,
-        collate_fn=hidden_state_collate_fn,
-        drop_last=False,
-    )
+    batch_size = int(cfg["training"].get("batch_size", 2))
+    bucket_weights = data_cfg.get("bucket_weights")
+    steps_per_epoch = data_cfg.get("steps_per_epoch")
+    if bucket_weights is not None:
+        if steps_per_epoch is None:
+            raise ValueError("data.steps_per_epoch is required when using data.bucket_weights")
+        bucket_batch_sizes_cfg = data_cfg.get("bucket_batch_sizes")
+        batch_sampler = WeightedBucketBatchSampler(
+            group_to_indices=dataset.group_to_indices,
+            batch_size=batch_size,
+            steps_per_epoch=int(steps_per_epoch),
+            bucket_weights={str(key): float(value) for key, value in bucket_weights.items()},
+            bucket_batch_sizes=(
+                {str(key): int(value) for key, value in bucket_batch_sizes_cfg.items()}
+                if bucket_batch_sizes_cfg is not None
+                else None
+            ),
+            seed=seed,
+            rank=rank,
+            world_size=world_size,
+        )
+    else:
+        sampler = DistributedSampler(dataset, shuffle=True) if distributed else None
+
+    dataloader_kwargs = {
+        "dataset": dataset,
+        "num_workers": num_workers,
+        "pin_memory": device.type == "cuda",
+        "persistent_workers": num_workers > 0,
+        "prefetch_factor": int(data_cfg.get("prefetch_factor", 2)) if num_workers > 0 else None,
+        "collate_fn": hidden_state_collate_fn,
+    }
+    if batch_sampler is not None:
+        dataloader = DataLoader(
+            batch_sampler=batch_sampler,
+            **dataloader_kwargs,
+        )
+    else:
+        dataloader = DataLoader(
+            batch_size=batch_size,
+            shuffle=sampler is None,
+            sampler=sampler,
+            drop_last=False,
+            **dataloader_kwargs,
+        )
     logger.info(
         "Loaded %d samples from %s | batch_size_per_rank=%d | num_workers=%d",
         len(dataset),
-        data_cfg["data_root"],
-        int(cfg["training"].get("batch_size", 2)),
+        data_root,
+        batch_size,
         num_workers,
     )
 
@@ -127,6 +192,22 @@ def main() -> None:
         span_sampler=span_sampler,
     )
     model.to(device)
+
+    init_checkpoint = args.init_checkpoint or cfg["training"].get("init_checkpoint")
+    if init_checkpoint:
+        payload = load_checkpoint(
+            checkpoint_path=init_checkpoint,
+            model=model,
+            optimizer=None,
+            scaler=None,
+            map_location="cpu",
+        )
+        logger.info(
+            "Initialized model from checkpoint %s (epoch=%s, global_step=%s)",
+            init_checkpoint,
+            payload.get("epoch"),
+            payload.get("global_step"),
+        )
     if distributed:
         model = DistributedDataParallel(
             model,
@@ -163,9 +244,10 @@ def main() -> None:
         grad_clip_norm=cfg["training"].get("grad_clip_norm"),
         amp_enabled=bool(cfg["training"].get("amp", True)),
         log_interval=int(cfg["training"].get("log_interval", 10)),
-        train_sampler=sampler,
+        train_sampler=batch_sampler if batch_sampler is not None else sampler,
         is_main_process=main_process,
         world_size=world_size,
+        wandb_logger=wandb_logger,
     )
     try:
         trainer.train(
@@ -175,6 +257,8 @@ def main() -> None:
         if main_process:
             logger.info("Training completed. Checkpoints saved in %s", output_dir)
     finally:
+        if wandb_logger is not None:
+            wandb_logger.finish()
         cleanup_distributed()
 
 

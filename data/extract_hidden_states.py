@@ -4,19 +4,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from pathlib import Path
 import sys
 from typing import Any
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from utils import resolve_torch_dtype
+
+
+logger = logging.getLogger("extract_hidden_states")
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +51,11 @@ def parse_args() -> argparse.Namespace:
         "--skip-existing",
         action="store_true",
         help="Skip samples whose output .pt file already exists.",
+    )
+    parser.add_argument(
+        "--force-causal-lm",
+        action="store_true",
+        help="Force loading with AutoModelForCausalLM instead of preferring AutoModel.",
     )
     return parser.parse_args()
 
@@ -108,10 +117,56 @@ def chunked_examples(examples: list[dict[str, Any]], batch_size: int) -> list[li
     return [examples[start : start + batch_size] for start in range(0, len(examples), batch_size)]
 
 
+def load_backbone(
+    model_path: str,
+    model_dtype: torch.dtype,
+    force_causal_lm: bool,
+) -> tuple[torch.nn.Module, str]:
+    if not force_causal_lm:
+        try:
+            model = AutoModel.from_pretrained(
+                model_path,
+                trust_remote_code=True,
+                torch_dtype=model_dtype,
+            )
+            return model, "AutoModel"
+        except Exception as exc:
+            logger.warning(
+                "AutoModel load failed for %s; falling back to AutoModelForCausalLM. Error: %s",
+                model_path,
+                exc,
+            )
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        trust_remote_code=True,
+        torch_dtype=model_dtype,
+    )
+    return model, "AutoModelForCausalLM"
+
+
+def extract_last_hidden(outputs: Any) -> torch.Tensor:
+    last_hidden = getattr(outputs, "last_hidden_state", None)
+    if last_hidden is not None:
+        return last_hidden
+
+    hidden_states = getattr(outputs, "hidden_states", None)
+    if hidden_states is not None:
+        return hidden_states[-1]
+
+    if isinstance(outputs, tuple) and outputs:
+        if isinstance(outputs[0], torch.Tensor):
+            return outputs[0]
+
+    raise ValueError("Could not extract last hidden state from model outputs.")
+
+
 def main() -> None:
     args = parse_args()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    device = torch.device(args.device)
 
     input_path = Path(args.input)
     input_format = infer_input_format(input_path, args.input_format)
@@ -136,13 +191,21 @@ def main() -> None:
         return
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(
-        args.model_path,
-        trust_remote_code=True,
-        torch_dtype=resolve_torch_dtype(args.model_dtype),
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
+
+    model_dtype = resolve_torch_dtype(args.model_dtype)
+    if model_dtype is None:
+        raise ValueError(f"Unsupported --model-dtype {args.model_dtype}")
+
+    model, model_loader_name = load_backbone(
+        model_path=args.model_path,
+        model_dtype=model_dtype,
+        force_causal_lm=bool(args.force_causal_lm),
     )
-    model.to(args.device)
+    model.to(device)
     model.eval()
+    logger.info("Loaded backbone with %s", model_loader_name)
 
     save_dtype = resolve_torch_dtype(args.save_dtype)
     if save_dtype is None:
@@ -156,11 +219,12 @@ def main() -> None:
             truncation=True,
             max_length=args.max_length,
             return_tensors="pt",
-        ).to(args.device)
+        ).to(device)
 
-        with torch.no_grad():
-            outputs = model(**encoded, output_hidden_states=True, use_cache=False)
-            last_hidden = outputs.hidden_states[-1].detach().to(dtype=save_dtype).cpu()
+        with torch.inference_mode():
+            with torch.amp.autocast(device_type=device.type, enabled=device.type == "cuda"):
+                outputs = model(**encoded, use_cache=False, return_dict=True)
+            last_hidden = extract_last_hidden(outputs).detach().to(dtype=save_dtype).cpu()
             attention_mask = encoded["attention_mask"].bool().cpu()
 
         for row, example in enumerate(batch_examples):

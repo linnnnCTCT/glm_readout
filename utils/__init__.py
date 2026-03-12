@@ -6,6 +6,7 @@ from .distributed import cleanup_distributed, init_distributed, is_main_process
 from .dtypes import resolve_torch_dtype
 from .logging_utils import setup_logging
 from .seed import set_seed
+from .wandb_utils import WandbLogger
 
 __all__ = [
     "load_checkpoint",
@@ -17,4 +18,5 @@ __all__ = [
     "resolve_torch_dtype",
     "setup_logging",
     "set_seed",
+    "WandbLogger",
 ]

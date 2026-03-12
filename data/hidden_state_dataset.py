@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ class HiddenStateDataset(Dataset):
 
     def __init__(
         self,
-        data_root: str | Path,
+        data_root: str | Path | list[str] | tuple[str | Path, ...],
         hidden_key: str = "hidden_states",
         attention_mask_key: str = "attention_mask",
         label_key: str = "label",
@@ -29,8 +30,15 @@ class HiddenStateDataset(Dataset):
         max_length: int | None = None,
         random_crop: bool = False,
         extensions: tuple[str, ...] = (".pt", ".pth", ".npy", ".npz"),
+        data_root_names: list[str] | tuple[str, ...] | None = None,
     ) -> None:
-        self.data_root = Path(data_root)
+        if isinstance(data_root, (list, tuple)):
+            raw_roots = [Path(root) for root in data_root]
+        else:
+            raw_roots = [Path(data_root)]
+        if not raw_roots:
+            raise ValueError("data_root must contain at least one path")
+        self.data_roots = raw_roots
         self.hidden_key = hidden_key
         self.attention_mask_key = attention_mask_key
         self.label_key = label_key
@@ -38,18 +46,49 @@ class HiddenStateDataset(Dataset):
         self.max_length = max_length
         self.random_crop = random_crop
         self.extensions = extensions
-        self.files = self._discover_files()
+        self.data_root_names = self._resolve_root_names(data_root_names)
+        self.files, self.file_groups = self._discover_files()
+        self.group_to_indices = self._build_group_index()
 
         if not self.files:
             raise FileNotFoundError(
-                f"No hidden-state files found under {self.data_root} with {self.extensions}"
+                f"No hidden-state files found under {self.data_roots} with {self.extensions}"
             )
 
-    def _discover_files(self) -> list[Path]:
+    def _resolve_root_names(
+        self, data_root_names: list[str] | tuple[str, ...] | None
+    ) -> list[str]:
+        if data_root_names is not None:
+            if len(data_root_names) != len(self.data_roots):
+                raise ValueError("data_root_names must align with data_root paths")
+            return [str(name) for name in data_root_names]
+
+        resolved_names: list[str] = []
+        for root in self.data_roots:
+            parent_name = root.parent.name
+            if parent_name and parent_name not in {"", "."}:
+                resolved_names.append(parent_name)
+            else:
+                resolved_names.append(root.name)
+        return resolved_names
+
+    def _discover_files(self) -> tuple[list[Path], list[str]]:
         files: list[Path] = []
-        for extension in self.extensions:
-            files.extend(sorted(self.data_root.rglob(f"*{extension}")))
-        return sorted(files)
+        file_groups: list[str] = []
+        for root, root_name in zip(self.data_roots, self.data_root_names):
+            root_files: list[Path] = []
+            for extension in self.extensions:
+                root_files.extend(sorted(root.rglob(f"*{extension}")))
+            root_files = sorted(root_files)
+            files.extend(root_files)
+            file_groups.extend([root_name] * len(root_files))
+        return files, file_groups
+
+    def _build_group_index(self) -> dict[str, list[int]]:
+        groups: OrderedDict[str, list[int]] = OrderedDict()
+        for index, group_name in enumerate(self.file_groups):
+            groups.setdefault(group_name, []).append(index)
+        return dict(groups)
 
     def __len__(self) -> int:
         return len(self.files)

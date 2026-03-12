@@ -4,7 +4,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "${PROJECT_ROOT}/scripts/common_launcher.sh"
 
-MODEL_PATH="${MODEL_PATH:-$PROJECT_ROOT/model/Genos_m.GQA-MoE32-2-5B-8k}"
+MODEL_PATH="${MODEL_PATH:-$PROJECT_ROOT/model/Genos_m.GQA-MoE32-5B-32k}"
 DATASET_ROOT="${DATASET_ROOT:-$PROJECT_ROOT/outputs/feasibility_dataset}"
 HS_ROOT="${HS_ROOT:-$DATASET_ROOT/hidden_states}"
 MODEL_DTYPE="${MODEL_DTYPE:-bfloat16}"

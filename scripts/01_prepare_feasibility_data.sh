@@ -13,6 +13,8 @@ EXTRACT_CHUNKSIZE="${EXTRACT_CHUNKSIZE:-8}"
 PROGRESS_EVERY="${PROGRESS_EVERY:-250}"
 REUSE_METADATA="${REUSE_METADATA:-1}"
 SELECTION_MODE="${SELECTION_MODE:-independent}"
+CONTIG_SPACER_CHAR="${CONTIG_SPACER_CHAR:-#}"
+CONTIG_SPACER_LENGTH="${CONTIG_SPACER_LENGTH:-1}"
 
 read -r -a BUCKET_SPECS <<< "${BUCKET_SPECS:-8k:8192:3000:400:400 32k:32768:1500:200:200 128k:131072:300:50:50 1m:1048576:40:10:10}"
 read -r -a WINDOWS_PER_GENOME_SPECS <<< "${WINDOWS_PER_GENOME:-8k:4:1:1 32k:4:1:1 128k:2:1:1 1m:1:1:1}"
@@ -28,7 +30,8 @@ ARGS=(
   --output-dir "$OUTPUT_ROOT"
   --seed "$SEED"
   --concat-contigs
-  --contig-spacer-length 1
+  --contig-spacer-length "$CONTIG_SPACER_LENGTH"
+  --contig-spacer-char "$CONTIG_SPACER_CHAR"
   --workers "$WORKERS"
   --summary-chunksize "$SUMMARY_CHUNKSIZE"
   --extract-chunksize "$EXTRACT_CHUNKSIZE"
