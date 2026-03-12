@@ -475,6 +475,7 @@ def main() -> None:
     l2_normalize = not args.disable_l2_normalize
     standardize = not args.disable_standardize
     num_classes = len(train_payload.id_to_label)
+    num_test_classes = int(torch.unique(test_payload.labels).numel())
     emb_dim = int(train_payload.embeddings.shape[1])
 
     classification_results: dict[str, Any] = {}
@@ -530,7 +531,7 @@ def main() -> None:
     clustering_results = run_minibatch_kmeans(
         test_payload.embeddings,
         test_payload.labels,
-        num_clusters=num_classes,
+        num_clusters=num_test_classes,
         batch_size=args.cluster_batch_size,
         fit_passes=args.cluster_fit_passes,
         n_init=args.cluster_n_init,
@@ -544,6 +545,7 @@ def main() -> None:
         "train_embeddings": str(Path(args.train_embeddings).resolve()),
         "test_embeddings": str(Path(args.test_embeddings).resolve()),
         "num_classes": int(num_classes),
+        "num_test_classes": int(num_test_classes),
         "embedding_dim": int(emb_dim),
         "shots": shots,
         "selection": {
