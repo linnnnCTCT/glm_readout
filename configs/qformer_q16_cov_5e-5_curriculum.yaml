@@ -1,0 +1,126 @@
+experiment:
+  name: qformer_q16_cov_5e-5_curriculum
+  seed: 42
+  output_dir: outputs/qformer_q16_cov_5e-5_curriculum
+
+wandb:
+  enabled: false
+  project: contextagg-readout
+  entity: null
+  name: qformer_q16_cov_5e-5_curriculum
+  tags: [qformer, jepa, curriculum, dout1024]
+  mode: online
+  dir: null
+
+data:
+  data_root: data/hidden_states
+  hidden_key: hidden_states
+  attention_mask_key: attention_mask
+  label_key: label
+  hidden_dtype: bfloat16
+  max_length: 131072
+  random_crop: false
+  num_workers: 8
+  prefetch_factor: 4
+
+model:
+  type: qformer
+  d_in: 1024
+  d_out: 1024
+  num_queries: 16
+  num_layers: 2
+  num_heads: 8
+  ffn_multiplier: 4
+  dropout: 0.1
+  seq_pool: attn
+  chunk_pooling:
+    enabled: true
+    chunk_size: 64
+    stride: 64
+    mode: mean
+
+jepa:
+  predictor_hidden_dim: 2048
+  use_span_position: true
+  ema_decay: 0.995
+  span:
+    min_tokens: 256
+    max_tokens: 2048
+    span_ratio: 0.1
+
+corruption:
+  mask_ratio: 0.30
+  noise_std: 0.01
+  zero_replace_prob: 1.0
+  mask_target_span: true
+
+loss:
+  variance_weight: 0.01
+  covariance_weight: 5.0e-5
+  variance_floor: 1.0
+
+training:
+  batch_size: 12
+  epochs: 1
+  lr: 1.0e-4
+  weight_decay: 0.01
+  grad_clip_norm: 1.0
+  amp: true
+  log_interval: 10
+  ddp_find_unused_parameters: false
+  ddp_broadcast_buffers: false
+
+curriculum:
+  phases:
+    - name: p1_bootstrap
+      buckets: [8k, 32k]
+      bucket_weights:
+        8k: 0.70
+        32k: 0.30
+      bucket_batch_sizes:
+        8k: 12
+        32k: 6
+      steps_per_epoch: 256
+      epochs: 6
+      lr: 1.0e-4
+      max_length: 32768
+    - name: p2_bridge
+      buckets: [8k, 32k, 128k]
+      bucket_weights:
+        8k: 0.20
+        32k: 0.60
+        128k: 0.20
+      bucket_batch_sizes:
+        8k: 10
+        32k: 6
+        128k: 3
+      steps_per_epoch: 256
+      epochs: 5
+      lr: 7.0e-5
+      max_length: 131072
+    - name: p3_long
+      buckets: [32k, 128k, 1m]
+      bucket_weights:
+        32k: 0.20
+        128k: 0.70
+        1m: 0.10
+      bucket_batch_sizes:
+        32k: 6
+        128k: 3
+        1m: 1
+      steps_per_epoch: 128
+      epochs: 4
+      lr: 4.0e-5
+      max_length: 1048576
+    - name: p4_adapt
+      buckets: [128k, 1m]
+      bucket_weights:
+        128k: 0.80
+        1m: 0.20
+      bucket_batch_sizes:
+        128k: 2
+        1m: 1
+      steps_per_epoch: 128
+      epochs: 2
+      lr: 2.0e-5
+      max_length: 1048576
